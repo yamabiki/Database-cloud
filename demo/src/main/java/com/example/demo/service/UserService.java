@@ -29,6 +29,9 @@ public class UserService {
 	}
 
 	public User create(@Valid User user) {
+		// Ignore client-sent id/createdAt to avoid insert errors
+		user.setId(null);
+		user.setCreatedAt(null);
 		if (userRepository.existsByEmail(user.getEmail())) {
 			throw new IllegalArgumentException("Email already in use");
 		}
