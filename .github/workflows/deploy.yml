@@ -28,11 +28,14 @@ jobs:
             cd /home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode
           }
 
-                  echo "Зупинка поточного додатку..."
-          pkill -f "java.*demo" || echo "Додаток не був запущений"
-          
-          echo "Отримання останніх змін з Git..."
-          git pull origin
+          if pgrep -f "java.*demo"; then
+            echo "Зупинка поточного додатку..."
+            pkill -f "java.*demo"
+          else
+            echo "Додаток не був запущений"
+          fi
+
+          git fetch origin
           git reset --hard origin/${{ github.ref_name }}
 
           echo "Збірка проекту..."
