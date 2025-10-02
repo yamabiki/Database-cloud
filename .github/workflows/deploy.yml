@@ -22,6 +22,18 @@ jobs:
           ssh-keyscan -p "${{ secrets.AZURE_VM_PORT || 22 }}" "${{ secrets.AZURE_VM_HOST }}" >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
+      - uses: azure/login@v1
+        with:
+        creds: ${{ secrets.AZURE_CREDS }}
+
+      - name: Get DB secrets from Key Vault
+        id: secrets
+        run: |
+          DB_USERNAME=$(az keyvault secret show --vault-name Database-key-vault1 --name DB-username --query value -o tsv)
+          DB_PASSWORD=$(az keyvault secret show --vault-name Database-key-vault1 --name DB-password --query value -o tsv)
+          echo "DB_USERNAME=$DB_USERNAME" >> $GITHUB_ENV
+          echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV      
+
       - name: SSH connectivity check
         run: |
           ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes \
@@ -41,8 +53,8 @@ jobs:
             ${{ secrets.AZURE_VM_USERNAME }}@${{ secrets.AZURE_VM_HOST }} 'bash -s' <<'ENDSSH'
             set -eux
 
-            export SPRING_DATASOURCE_USERNAME="${{ secrets.DB_USERNAME }}"
-            export SPRING_DATASOURCE_PASSWORD="${{ secrets.DB_PASSWORD }}"
+            export SPRING_DATASOURCE_USERNAME="${{ env.DB_USERNAME }}"
+            export SPRING_DATASOURCE_PASSWORD="${{ env.DB_PASSWORD }}"
 
             APP_DIR="/home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode"
             cd "$APP_DIR"
