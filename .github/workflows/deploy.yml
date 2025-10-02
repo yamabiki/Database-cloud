@@ -1,0 +1,51 @@
+name: Deploy to Azure VM
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+    types: [ closed ]
+
+jobs:
+  deploy:
+    name: Deploy to Azure VM
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    
+    steps:
+    - name: Deploy to Azure VM
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.AZURE_VM_HOST }}
+        username: ${{ secrets.AZURE_VM_USERNAME }}
+        key: ${{ secrets.AZURE_VM_SSH_KEY }}
+        port: ${{ secrets.AZURE_VM_PORT || 22 }}
+        script: |
+          # Навігація до директорії проекту
+          cd /home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode || {
+            echo "Проект не знайдено, клонуємо репозиторій..."
+            git clone ${{ github.server_url }}/${{ github.repository }}.git /home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode
+            cd /home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode
+          }
+          
+          # Зупинка поточного додатку (якщо працює)
+          echo "Зупинка поточного додатку..."
+          pkill -f "java.*demo" || echo "Додаток не був запущений"
+          
+          # Отримання останніх змін
+          echo "Отримання останніх змін з Git..."
+          git fetch origin
+          git reset --hard origin/${{ github.ref_name }}
+          
+          # Збірка проекту
+          echo "Збірка проекту..."
+          cd demo
+          chmod +x mvnw
+          ./mvnw clean package -DskipTests
+          
+          # Запуск додатку у фоні
+          echo "Запуск додатку..."
+          nohup java -jar target/demo-*.jar > /tmp/spring-boot.log 2>&1 &
+          
+          echo "Деплой завершено!"
