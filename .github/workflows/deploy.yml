@@ -2,44 +2,87 @@ name: Deploy to Azure VM
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-    types: [ closed ]
+    branches: [ "main", "master" ]
+  workflow_dispatch: {}
 
 jobs:
   deploy:
-    name: Deploy to Azure VM
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
-    
     steps:
-    - name: Deploy to Azure VM
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.AZURE_VM_HOST }}
-        username: ${{ secrets.AZURE_VM_USERNAME }}
-        key: ${{ secrets.AZURE_VM_SSH_KEY }}
-        port: ${{ secrets.AZURE_VM_PORT || 22 }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH (key + known_hosts)
         run: |
-          cd /home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode || {
-            echo "Проект не знайдено, клонуємо репозиторій..."
-            git clone ${{github.server_url}}/${{github.repository}}.git /home/${{secrets.AZURE_VM_USERNAME}}/usersdbcode
-            cd /home/${{secrets.AZURE_VM_USERNAME}}/usersdbcode
-          }
-          
-          echo "Зупинка поточного додатку..."
-          pkill -f "java.*demo" || echo "Додаток не був запущений"
-          
-          git fetch origin
-          git reset --hard origin/${{github.ref_name}}
-          
-          echo "Збірка проекту..."
-          cd demo
-          chmod +x mvnw
-          ./mvnw clean package -DskipTests
-          
-          echo "Запуск додатку..."
-          nohup java -jar target/demo-*.jar > /tmp/spring-boot.log 2>&1 & disown
-          
-          echo "Деплой завершено!"
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          cat > ~/.ssh/id_ed25519 <<'EOF'
+          ${{ secrets.AZURE_VM_SSH_KEY }}
+          EOF
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${{ secrets.AZURE_VM_PORT || 22 }}" "${{ secrets.AZURE_VM_HOST }}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: SSH connectivity check
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -p ${{ secrets.AZURE_VM_PORT || 22 }} \
+            ${{ secrets.AZURE_VM_USERNAME }}@${{ secrets.AZURE_VM_HOST }} "echo SSH_OK && hostname && date"
+
+      - name: Rsync code to VM
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes -p ${{ secrets.AZURE_VM_PORT || 22 }}" \
+            --exclude '.git' --exclude '.github' --exclude 'target' \
+            ./ ${{ secrets.AZURE_VM_USERNAME }}@${{ secrets.AZURE_VM_HOST }}:/home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode/
+
+      - name: Remote deploy (stop + build + start)
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes -p ${{ secrets.AZURE_VM_PORT || 22 }} \
+            ${{ secrets.AZURE_VM_USERNAME }}@${{ secrets.AZURE_VM_HOST }} 'bash -s' <<'ENDSSH'
+            set -eux
+
+            APP_DIR="/home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode"
+            cd "$APP_DIR"
+
+            # Зупинка поточного додатку
+            pkill -f "java.*demo" || echo "Додаток не був запущений"
+
+            # Git оновлення
+            git fetch origin
+            branch=$(git rev-parse --abbrev-ref HEAD)
+            git reset --hard origin/$branch
+
+            # Збірка Maven
+            if [ -d "demo" ]; then
+              cd demo
+              chmod +x mvnw
+              ./mvnw clean package -DskipTests
+            else
+              echo "Каталог demo не знайдено"
+              exit 1
+            fi
+
+            # Запуск нового додатку
+            JAR_FILE=$(ls target/demo-*.jar | head -n1)
+            if [ -z "$JAR_FILE" ]; then
+              echo "JAR файл не знайдено"
+              exit 1
+            fi
+            nohup java -jar "$JAR_FILE" > /home/${{ secrets.AZURE_VM_USERNAME }}/spring-boot.log 2>&1 &
+            disown
+
+            echo "Деплой завершено!"
+ENDSSH
+
+      - name: Remote health check
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes -p ${{ secrets.AZURE_VM_PORT || 22 }} \
+            ${{ secrets.AZURE_VM_USERNAME }}@${{ secrets.AZURE_VM_HOST }} '
+            set -e
+            for i in {1..30}; do
+              code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/actuator/health || true)
+              if [ "$code" = "200" ]; then echo "Healthy"; exit 0; fi
+              echo "Not ready ($i), code=$code"; sleep 2
+            done
+            exit 1
+          '
