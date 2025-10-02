@@ -27,17 +27,13 @@ jobs:
             git clone ${{ github.server_url }}/${{ github.repository }}.git /home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode
             cd /home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode
           }
-
-          if pgrep -f "java.*demo"; then
-            echo "Зупинка поточного додатку..."
-            pkill -f "java.*demo"
-          else
-            echo "Додаток не був запущений"
-          fi
-
-          git fetch origin
-          git reset --hard origin/${{ github.ref_name }}
-
+          
+          echo "Зупинка поточного додатку..."
+          pkill -f "java.*demo" || echo "Додаток не був запущений"
+          
+          git fetch main
+          git reset --hard main/${{ github.ref_name }}
+          
           echo "Збірка проекту..."
           cd demo
           chmod +x mvnw
