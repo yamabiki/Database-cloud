@@ -72,7 +72,6 @@ jobs:
             disown
 
             echo "Деплой завершено!"
-ENDSSH
 
       - name: Remote health check
         run: |
