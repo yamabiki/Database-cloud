@@ -27,7 +27,14 @@ jobs:
             git clone ${{ github.server_url }}/${{ github.repository }}.git /home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode
             cd /home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode
           }
+
+                  echo "Зупинка поточного додатку..."
+          pkill -f "java.*demo" || echo "Додаток не був запущений"
           
+          echo "Отримання останніх змін з Git..."
+          git pull origin
+          git reset --hard origin/${{ github.ref_name }}
+
           echo "Збірка проекту..."
           cd demo
           chmod +x mvnw
