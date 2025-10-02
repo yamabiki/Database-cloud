@@ -41,6 +41,6 @@ jobs:
           ./mvnw clean package -DskipTests
           
           echo "Запуск додатку..."
-          nohup java -jar target/demo-*.jar > /tmp/spring-boot.log 2>&1 &
+          nohup java -jar target/demo-*.jar > /tmp/spring-boot.log 2>&1 & disown
           
           echo "Деплой завершено!"
