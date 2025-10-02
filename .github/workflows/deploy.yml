@@ -24,15 +24,15 @@ jobs:
         script: |
           cd /home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode || {
             echo "Проект не знайдено, клонуємо репозиторій..."
-            git clone ${{ github.server_url }}/${{ github.repository }}.git /home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode
-            cd /home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode
+            git clone ${{github.server_url}}/${{github.repository}}.git /home/${{secrets.AZURE_VM_USERNAME}}/usersdbcode
+            cd /home/${{secrets.AZURE_VM_USERNAME}}/usersdbcode
           }
           
           echo "Зупинка поточного додатку..."
           pkill -f "java.*demo" || echo "Додаток не був запущений"
           
-          git fetch main
-          git reset --hard main/${{ github.ref_name }}
+          git fetch origin
+          git reset --hard origin/${{github.ref_name}}
           
           echo "Збірка проекту..."
           cd demo
