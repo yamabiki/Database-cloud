@@ -3,6 +3,9 @@ name: Deploy to Azure VM
 on:
   push:
     branches: [ "main", "master" ]
+  permissions:
+    id-token: write
+    contents: read 
   workflow_dispatch: {}
 
 jobs:
