@@ -41,7 +41,8 @@ jobs:
             ${{ secrets.AZURE_VM_USERNAME }}@${{ secrets.AZURE_VM_HOST }} 'bash -s' <<'ENDSSH'
             set -eux
 
-
+            export SPRING_DATASOURCE_USERNAME="${{ secrets.DB_USERNAME }}"
+            export SPRING_DATASOURCE_PASSWORD="${{ secrets.DB_PASSWORD }}"
 
             APP_DIR="/home/${{ secrets.AZURE_VM_USERNAME }}/usersdbcode"
             cd "$APP_DIR"
@@ -74,16 +75,3 @@ jobs:
             disown
 
             echo "Деплой завершено!"
-
-      - name: Remote health check
-        run: |
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes -p ${{ secrets.AZURE_VM_PORT || 22 }} \
-            ${{ secrets.AZURE_VM_USERNAME }}@${{ secrets.AZURE_VM_HOST }} '
-            set -e
-            for i in {1..30}; do
-              code=$(curl -s -o /dev/null -w "%{http_code}" http://48.220.48.235:8080/actuator/health || true)
-              if [ "$code" = "200" ]; then echo "Healthy"; exit 0; fi
-              echo "Not ready ($i), code=$code"; sleep 2
-            done
-            exit 1
-          '
