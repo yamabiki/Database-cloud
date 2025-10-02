@@ -21,11 +21,10 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "${{ secrets.AZURE_VM_PORT || 22 }}" "${{ secrets.AZURE_VM_HOST }}" >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
-          
+
       - name: Login to Azure
         uses: azure/login@v1
-        with:
-        creds: ${{ secrets.AZURE_CREDS }}
+        with: ${{ secrets.AZURE_CREDS }}
 
       - name: Get DB secrets from Key Vault
         id: secrets
