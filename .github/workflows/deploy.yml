@@ -80,13 +80,15 @@ jobs:
             --env-vars \
               "SPRING_DATASOURCE_USERNAME=secretref:db-user" \
               "SPRING_DATASOURCE_PASSWORD=secretref:db-pass" \
-              "SPRING_DATASOURCE_URL=jdbc:postgresql://${{ secrets.VM_PUBLIC_IP }}:5432/usersdb"
+              "SPRING_DATASOURCE_URL=jdbc:postgresql://${{ secrets.VM_PUBLIC_IP }}:5432/usersdb" \
+            --scale-rules ./scaling-rules.json \
+
+
           
           az containerapp update \
             --name ${{ env.ACA_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
-            --scale-rules @./scaling-rules.json
-
+            
       - name: Get Container App FQDN
         id: get-url
         run: |
