@@ -78,7 +78,7 @@ jobs:
             --target-port 8080 \
             --ingress 'external' \
             --min-replicas 1 \
-            --max-replicas 5 \
+            --max-replicas 4 \
             --scale-rule-name "cpu-scaling-rule" \
             --scale-rule-type "cpu" \
             --scale-rule-metadata "type=Utilization" "value=70" \
