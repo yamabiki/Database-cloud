@@ -31,8 +31,8 @@ jobs:
       - name: Get DB secrets from Key Vault
         id: secrets
         run: |
-          DB_USERNAME=$(az keyvault secret show --vault-name Database-key-vault1 --name DB-username --query value -o tsv)
-          DB_PASSWORD=$(az keyvault secret show --vault-name Database-key-vault1 --name DB-password --query value -o tsv)
+          DB_USERNAME=$(az keyvault secret show --vault-name Database-key-vault11 --name DB-username --query value -o tsv)
+          DB_PASSWORD=$(az keyvault secret show --vault-name Database-key-vault11 --name DB-password --query value -o tsv)
           echo "DB_USERNAME=$DB_USERNAME" >> $GITHUB_ENV
           echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV      
 
