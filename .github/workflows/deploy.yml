@@ -81,7 +81,7 @@ jobs:
               "SPRING_DATASOURCE_USERNAME=secretref:db-user" \
               "SPRING_DATASOURCE_PASSWORD=secretref:db-pass" \
               "SPRING_DATASOURCE_URL=jdbc:postgresql://${{ secrets.VM_PUBLIC_IP }}:5432/usersdb" \
-            --scale-rules ./scaling-rules.json \
+            --scale-rules @./scaling-rules.json \
 
 
           
