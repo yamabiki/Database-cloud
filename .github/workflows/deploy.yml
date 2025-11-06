@@ -99,6 +99,7 @@ jobs:
               -p 8080:8080 \
               -e SPRING_DATASOURCE_USERNAME="$SPRING_DATASOURCE_USERNAME" \
               -e SPRING_DATASOURCE_PASSWORD="$SPRING_DATASOURCE_PASSWORD" \
+              -e SPRING_DATASOURCE_URL="jdbc:postgresql://172.17.0.1:5432/usersdb" \
               $ACR_LOGIN_SERVER/$IMAGE_NAME:$IMAGE_TAG
 
             # (Опціонально) Очищуємо старі, невикористовувані образи
