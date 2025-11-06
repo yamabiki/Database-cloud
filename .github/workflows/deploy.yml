@@ -85,7 +85,7 @@ jobs:
           az containerapp update \
             --name ${{ env.ACA_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
-            --scale-rules ./scaling-rules.json
+            --scale-rules @./scaling-rules.json
 
       - name: Get Container App FQDN
         id: get-url
