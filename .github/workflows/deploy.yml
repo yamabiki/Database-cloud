@@ -60,6 +60,11 @@ jobs:
             --location ${{ env.LOCATION }} \
             --logs-destination none
 
+      - name: Install/Update Azure ContainerApp Extension
+        run: |
+          az extension add --name containerapp --upgrade -y
+          echo "Azure containerapp extension updated."    
+
       - name: Create or Update Azure Container App
         run: |
           az containerapp create \
