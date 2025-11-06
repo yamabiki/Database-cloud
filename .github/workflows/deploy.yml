@@ -1,4 +1,4 @@
-name: Deploy Docker Container to Azure VM
+name: Deploy to Azure Container Apps (ACA)
 
 on:
   push:
@@ -10,10 +10,14 @@ permissions:
   contents: read 
 
 env:
-  IMAGE_NAME: usersdbcode1
+  IMAGE_NAME: usersdbcode
+  RESOURCE_GROUP: ${{ secrets.ACA_RESOURCE_GROUP }}       # Наприклад, 'my-app-rg'
+  ACA_ENVIRONMENT: ${{ secrets.ACA_ENVIRONMENT_NAME }}    # Наприклад, 'my-app-env'
+  ACA_NAME: ${{ secrets.ACA_APP_NAME }}                   # Наприклад, 'my-user-service'
+  LOCATION: 'westeurope'                                # Або будь-який інший регіон
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -27,8 +31,8 @@ jobs:
       - name: Get DB secrets from Key Vault
         id: secrets
         run: |
-          DB_USERNAME=$(az keyvault secret show --vault-name Database-key-vault11 --name DB-username --query value -o tsv)
-          DB_PASSWORD=$(az keyvault secret show --vault-name Database-key-vault11 --name DB-password --query value -o tsv)
+          DB_USERNAME=$(az keyvault secret show --vault-name Database-key-vault1 --name DB-username --query value -o tsv)
+          DB_PASSWORD=$(az keyvault secret show --vault-name Database-key-vault1 --name DB-password --query value -o tsv)
           echo "DB_USERNAME=$DB_USERNAME" >> $GITHUB_ENV
           echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV      
 
@@ -40,6 +44,7 @@ jobs:
           password: ${{ secrets.AZURE_CLIENT_SECRET }}
 
       - name: Build and push Docker image
+        id: build-push
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -47,63 +52,48 @@ jobs:
           push: true
           tags: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      - name: Prepare SSH (key + known_hosts)
+      - name: Create Azure Container App Environment
         run: |
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          cat > ~/.ssh/id_ed25519 <<'EOF'
-          ${{ secrets.AZURE_VM_SSH_KEY }}
-          EOF
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "${{ secrets.AZURE_VM_PORT || 22 }}" "${{ secrets.AZURE_VM_HOST }}" >> ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
+          az containerapp env create \
+            --name ${{ env.ACA_ENVIRONMENT }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --location ${{ env.LOCATION }} \
+            --logs-destination none
 
-      - name: SSH connectivity check
+      - name: Create or Update Azure Container App
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            -p ${{ secrets.AZURE_VM_PORT || 22 }} \
-            ${{ secrets.AZURE_VM_USERNAME }}@${{ secrets.AZURE_VM_HOST }} "echo SSH_OK && hostname && date"
+          az containerapp create \
+            --name ${{ env.ACA_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --environment ${{ env.ACA_ENVIRONMENT }} \
+            --image ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --registry-server ${{ secrets.ACR_LOGIN_SERVER }} \
+            --registry-username ${{ secrets.AZURE_CLIENT_ID }} \
+            --registry-password ${{ secrets.AZURE_CLIENT_SECRET }} \
+            --target-port 8080 \
+            --ingress 'external' \
+            --min-replicas 1 \
+            --max-replicas 4 \
+            --cpu 0.5 \
+            --memory 1.0Gi \
+            --secrets "db-user=${{ env.DB_USERNAME }}" "db-pass=${{ env.DB_PASSWORD }}" \
+            --env-vars \
+              "SPRING_DATASOURCE_USERNAME=secretref:db-user" \
+              "SPRING_DATASOURCE_PASSWORD=secretref:db-pass" \
+              "SPRING_DATASOURCE_URL=jdbc:postgresql://${{ secrets.VM_PUBLIC_IP }}:5432/usersdb"
+          
+          az containerapp update \
+            --name ${{ env.ACA_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --scale-rules ./scaling-rules.json
 
-
-      - name: Remote deploy (pull & run Docker container)
+      - name: Get Container App FQDN
+        id: get-url
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes -p ${{ secrets.AZURE_VM_PORT || 22 }} \
-            ${{ secrets.AZURE_VM_USERNAME }}@${{ secrets.AZURE_VM_HOST }} 'bash -s' <<'ENDSSH'
-            set -eux  # Вмикаємо суворий режим та вивід команд
+          URL=$(az containerapp show --name ${{ env.ACA_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --query "properties.configuration.ingress.fqdn" -o tsv)
+          echo "App URL: https://$URL"
+          echo "ACA_URL=$URL" >> $GITHUB_ENV
 
-            # Передаємо всі необхідні змінні
-            export SPRING_DATASOURCE_USERNAME="${{ env.DB_USERNAME }}"
-            export SPRING_DATASOURCE_PASSWORD="${{ env.DB_PASSWORD }}"
-            export ACR_LOGIN_SERVER="${{ secrets.ACR_LOGIN_SERVER }}"
-            export IMAGE_NAME="${{ env.IMAGE_NAME }}"
-            export IMAGE_TAG="${{ github.sha }}"
-            export CONTAINER_NAME="${{ env.IMAGE_NAME }}-container"
-
-            # Логін Docker на VM. 
-            # Використовуємо Service Principal (який використовувався для Azure login) для логіну в ACR
-            export ACR_USERNAME_SP="${{ secrets.AZURE_CLIENT_ID }}"
-            export ACR_PASSWORD_SP="${{ secrets.AZURE_CLIENT_SECRET }}"
-            
-            echo "$ACR_PASSWORD_SP" | docker login "$ACR_LOGIN_SERVER" -u "$ACR_USERNAME_SP" --password-stdin
-
-            # Зупиняємо і видаляємо старий контейнер, якщо він існує
-            docker stop $CONTAINER_NAME || true
-            docker rm $CONTAINER_NAME || true
-
-            # Завантажуємо новий образ
-            docker pull $ACR_LOGIN_SERVER/$IMAGE_NAME:$IMAGE_TAG
-
-            # Запускаємо новий контейнер
-            docker run -d \
-              --name $CONTAINER_NAME \
-              --restart always \
-              -p 8080:8080 \
-              -e SPRING_DATASOURCE_USERNAME="$SPRING_DATASOURCE_USERNAME" \
-              -e SPRING_DATASOURCE_PASSWORD="$SPRING_DATASOURCE_PASSWORD" \
-              -e SPRING_DATASOURCE_URL="jdbc:postgresql://172.17.0.1:5432/usersdb" \
-              $ACR_LOGIN_SERVER/$IMAGE_NAME:$IMAGE_TAG
-
-            # (Опціонально) Очищуємо старі, невикористовувані образи
-            docker image prune -a -f || true
-
-            echo "Docker deploy завершено!"
-          ENDSSH
+      - name: (Optional) Show FQDN
+        run: |
+          echo "Ваш додаток доступний за адресою: https://${{ env.ACA_URL }}"
