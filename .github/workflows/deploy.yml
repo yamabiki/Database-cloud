@@ -79,14 +79,16 @@ jobs:
             --ingress 'external' \
             --min-replicas 1 \
             --max-replicas 4 \
+            --scale-rule-name "cpu-scaling-rule" \
+            --scale-rule-type "cpu" \
+            --scale-rule-metadata "type=Utilization" "value=70" \
             --cpu 0.5 \
             --memory 1.0Gi \
             --secrets "db-user=${{ env.DB_USERNAME }}" "db-pass=${{ env.DB_PASSWORD }}" \
             --env-vars \
               "SPRING_DATASOURCE_USERNAME=secretref:db-user" \
               "SPRING_DATASOURCE_PASSWORD=secretref:db-pass" \
-              "SPRING_DATASOURCE_URL=jdbc:postgresql://${{ secrets.VM_PUBLIC_IP }}:5432/usersdb" \
-            --scale-rules @./scaling-rules.json \
+              "SPRING_DATASOURCE_URL=jdbc:postgresql://${{ secrets.VM_PUBLIC_IP }}:5432/usersdb"
 
 
           
